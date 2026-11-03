@@ -79,6 +79,11 @@ Index older sessions on demand (the timer only looks back `lookback_days`):
 Larger models write noticeably better summaries of long sessions; a 2B model
 tends to forget the early part of a multi-day session.
 
+While it is summarizing, each run writes
+`~/.local/state/claude-recall/indexer-<pid>.json` (session id, dir, chunk
+`n` of `m`, model) and removes it on exit, so a dashboard or status line can
+show that extraction is running. Ignore a file whose pid is no longer alive.
+
 ## What gets sent to the model, and what's stored
 
 The indexer reads transcripts from `~/.claude/projects/*/*.jsonl` and sends
