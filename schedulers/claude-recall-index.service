@@ -1,0 +1,7 @@
+[Unit]
+Description=claude-recall: summarize idle Claude Code sessions with local Ollama
+
+[Service]
+Type=oneshot
+Nice=10
+ExecStart=__PYTHON__ -I %h/.claude/skills/recall/scripts/session_index.py

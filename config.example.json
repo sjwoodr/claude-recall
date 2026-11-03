@@ -1,0 +1,11 @@
+{
+  "ollama_url": "http://localhost:11434",
+  "model": "gemma4:e4b-it-q8_0",
+  "num_ctx": 32768,
+  "idle_minutes": 60,
+  "lookback_days": 2,
+  "max_chunk_chars": 60000,
+  "max_sessions_per_run": 5,
+  "min_new_chars": 300,
+  "out_dir": "~/notes/claude-sessions"
+}

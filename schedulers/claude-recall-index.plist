@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>local.claude-recall.index</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>-I</string>
+    <string>__HOME__/.claude/skills/recall/scripts/session_index.py</string>
+  </array>
+  <key>StartInterval</key><integer>900</integer>
+  <key>Nice</key><integer>10</integer>
+  <key>LowPriorityIO</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/claude-recall-index.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/claude-recall-index.log</string>
+</dict>
+</plist>
