@@ -12,7 +12,7 @@ Config: ~/.config/claude-recall/config.json (or $CLAUDE_RECALL_CONFIG). Keys:
   lookback_days, max_chunk_chars, max_sessions_per_run, min_new_chars, out_dir.
 
 Usage:
-  session_index.py [--dry-run] [--session ID] [--backfill] [--ignore-idle] [--limit N]
+  session_index.py [--dry-run] [--session ID] [--backfill] [--ignore-idle] [--limit N] [--log FILE]
 """
 import argparse, datetime, fcntl, glob, json, os, re, shlex, sys, time, urllib.request
 
@@ -31,6 +31,7 @@ DEFAULTS = {
 MSG_CAP = 2000  # per user message; one long paste should not crowd out the rest
 CLAUDE_CAP = 600  # the opening of a reply carries its conclusion; replies are most of the volume
 LONG_AFTER_CHUNKS = 2  # past this many chunks a session gets the longer word limit
+LOG_MAX, LOG_KEEP = 1 << 20, 1 << 19  # --log file: past 1 MB, keep the newest 512 KB
 
 SYSTEM = """You maintain a reference index entry for one Claude Code session so its owner can find it again later.
 You receive the CURRENT ENTRY (may be empty) and a NEW EXCERPT of the conversation. Return the updated entry, merging the new excerpt into it.
@@ -218,6 +219,25 @@ def clear_status():
         pass
 
 
+def open_log(path):
+    """Send stdout and stderr to path, trimming it to its newest LOG_KEEP bytes once past LOG_MAX."""
+    path = os.path.expanduser(path)
+    if os.path.exists(path) and os.path.getsize(path) > LOG_MAX:
+        with open(path, "rb") as fh:
+            fh.seek(-LOG_KEEP, os.SEEK_END)
+            tail = fh.read()
+        with open(path, "wb") as fh:
+            fh.write(tail[tail.find(b"\n") + 1:])  # start on a whole line
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    os.dup2(fd, 1)
+    os.dup2(fd, 2)
+    os.close(fd)
+
+
+def stamp():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="report what would be sent; call no model, write nothing")
@@ -225,7 +245,10 @@ def main():
     ap.add_argument("--backfill", action="store_true", help="ignore lookback_days")
     ap.add_argument("--ignore-idle", action="store_true")
     ap.add_argument("--limit", type=int, help="max sessions to summarize this run")
+    ap.add_argument("--log", help="append output to this file, capped at 1 MB (for launchd, which never rotates)")
     a = ap.parse_args()
+    if a.log:
+        open_log(a.log)
     cfg = load_config()
     os.makedirs(cfg["out_dir"], exist_ok=True)
 
@@ -233,7 +256,7 @@ def main():
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print("another run holds the lock; exiting")
+        print("%s  another run holds the lock; exiting" % stamp())
         return
 
     state_path = os.path.join(cfg["out_dir"], ".state.json")
@@ -242,6 +265,7 @@ def main():
     limit = a.limit or cfg["max_sessions_per_run"]
 
     cands = []
+    waiting = 0  # grew, but used too recently to summarize
     for path in glob.glob(os.path.join(ROOT, "*", "*.jsonl")):
         sid = os.path.basename(path)[:-6]
         if a.session and not sid.startswith(a.session):
@@ -251,15 +275,17 @@ def main():
         if st.st_size <= s.get("offset", 0):
             continue
         if not (a.session or a.ignore_idle) and now - st.st_mtime < cfg["idle_minutes"] * 60:
+            waiting += 1
             continue
         if not (a.session or a.backfill) and now - st.st_mtime > cfg["lookback_days"] * 86400:
             continue
         cands.append((st.st_mtime, sid, path))
     cands.sort(reverse=True)
 
-    done = tot_chars = failed = 0
+    done = tot_chars = failed = left = 0
     for mtime, sid, path in cands:
         if done >= limit and not a.dry_run:
+            left = len(cands) - done
             print("limit of %d reached; %d more left: run again%s to continue" % (
                 limit, len(cands) - done, " with --backfill" if a.backfill else " (or wait for the timer)"))
             break
@@ -308,6 +334,9 @@ def main():
     if a.dry_run:
         print("\n%d candidate(s), %d over min_new_chars; %d chars (~%d tokens) total; model %s"
               % (len(cands), done, tot_chars, tot_chars / 4, cfg["model"]))
+    else:
+        print("%s  summarized %d, failed %d, left %d, waiting to go idle %d"
+              % (stamp(), done, failed, left, waiting))
     sys.exit(1 if failed else 0)
 
 

@@ -8,6 +8,8 @@
     <string>__PYTHON__</string>
     <string>-I</string>
     <string>__HOME__/.claude/skills/recall/scripts/session_index.py</string>
+    <string>--log</string>
+    <string>__HOME__/Library/Logs/claude-recall-index.log</string>
   </array>
   <key>StartInterval</key><integer>900</integer>
   <key>Nice</key><integer>10</integer>

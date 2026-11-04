@@ -79,6 +79,13 @@ Index older sessions on demand (the timer only looks back `lookback_days`):
 Larger models write noticeably better summaries of long sessions; a 2B model
 tends to forget the early part of a multi-day session.
 
+Every run ends with one timestamped line, such as
+`2026-11-03 20:15  summarized 1, failed 0, left 0, waiting to go idle 2`
+("left" = over `max_sessions_per_run`, picked up next run). On Linux it goes
+to the journal (`journalctl --user -u claude-recall-index`); on macOS to
+`~/Library/Logs/claude-recall-index.log`, which the indexer trims to its newest
+512 KB once it passes 1 MB, since launchd never rotates logs.
+
 While it is summarizing, each run writes
 `~/.local/state/claude-recall/indexer-<pid>.json` (session id, dir, chunk
 `n` of `m`, model) and removes it on exit, so a dashboard or status line can
