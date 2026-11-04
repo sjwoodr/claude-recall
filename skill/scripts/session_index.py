@@ -98,6 +98,8 @@ def extract(lines, meta):
         if t not in ("user", "assistant") or d.get("isSidechain") or d.get("isMeta") or d.get("isCompactSummary"):
             continue
         meta["cwd"] = d.get("cwd") or meta.get("cwd")
+        if d.get("cwd"):
+            meta.setdefault("start_cwd", d["cwd"])  # claude --resume finds a session only from here
         meta["branch"] = d.get("gitBranch") or meta.get("branch")
         ts = d.get("timestamp")
         if ts:
@@ -161,12 +163,25 @@ def summarize(cfg, current, excerpt, words=250):
     return text
 
 
+def first_cwd(path):
+    with open(path, "rb") as fh:
+        for line in fh:
+            try:
+                cwd = json.loads(line).get("cwd")
+            except ValueError:
+                continue
+            if cwd:
+                return cwd
+    return None
+
+
 def render(sid, meta, body):
-    cwd = meta.get("cwd") or "?"
+    cwd = meta.get("start_cwd") or meta.get("cwd") or "?"
+    last = meta.get("cwd")
     return "\n".join([
         "# %s" % (meta.get("title") or tilde(cwd)),
         "",
-        "- Repo/dir: `%s`" % tilde(cwd),
+        "- Repo/dir: `%s`" % tilde(cwd) + (" (last in `%s`)" % tilde(last) if last and last != cwd else ""),
         "- Branch: `%s`" % (meta.get("branch") or "?"),
         "- Active: %s to %s" % ((meta.get("first") or "?")[:16].replace("T", " "),
                                 (meta.get("last") or "?")[:16].replace("T", " ")),
@@ -197,7 +212,7 @@ def rebuild_index(cfg, state):
              "| Last active | Dir | Session | Summary |", "|---|---|---|---|"]
     for last, sid, m, summ in rows:
         lines.append("| %s | `%s` | [%s](%s.md) | %s |" % (
-            last[:10], tilde(m.get("cwd")), (m.get("title") or sid[:8]).replace("|", "/"), sid,
+            last[:10], tilde(m.get("start_cwd") or m.get("cwd")), (m.get("title") or sid[:8]).replace("|", "/"), sid,
             summ.replace("|", "/")))
     write_atomic(os.path.join(cfg["out_dir"], "INDEX.md"), "\n".join(lines) + "\n")
 
@@ -264,6 +279,23 @@ def main():
     state = json.load(open(state_path)) if os.path.exists(state_path) else {}
     now = time.time()
     limit = a.limit or cfg["max_sessions_per_run"]
+
+    # One-time repair: older entries resumed from the session's last dir, not its start dir.
+    fixed = 0
+    for path in [] if a.dry_run else glob.glob(os.path.join(ROOT, "*", "*.jsonl")):
+        sid = os.path.basename(path)[:-6]
+        s = state.get(sid) or {}
+        m = s.get("meta")
+        if not m or m.get("start_cwd"):
+            continue
+        m["start_cwd"] = first_cwd(path) or m.get("cwd")
+        if s.get("summarized") and s.get("body"):
+            write_atomic(os.path.join(cfg["out_dir"], sid + ".md"), render(sid, m, s["body"]))
+        fixed += 1
+    if fixed:
+        write_atomic(state_path, json.dumps(state, indent=1))
+        rebuild_index(cfg, state)
+        print("%s  set the resume dir on %d older entries" % (stamp(), fixed))
 
     cands = []
     waiting = 0  # grew, but used too recently to summarize
