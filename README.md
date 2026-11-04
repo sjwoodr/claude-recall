@@ -74,6 +74,7 @@ Index older sessions on demand (the timer only looks back `lookback_days`):
 | `max_chunk_chars` | `60000` | New text is sent in chunks of this size |
 | `max_sessions_per_run` | `5` | Bounds how long one run takes |
 | `min_new_chars` | `300` | Smaller increments wait until more accumulates |
+| `timeout_seconds` | `300` | Give up on a chunk after this long; the session is retried next run. Raise it if one chunk legitimately takes longer on your hardware (CPU-only, very large model) |
 | `out_dir` | `~/notes/claude-sessions` | Where entries, `INDEX.md` and state live |
 
 Larger models write noticeably better summaries of long sessions; a 2B model

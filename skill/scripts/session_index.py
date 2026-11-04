@@ -9,7 +9,7 @@ assistant prose, tool descriptions; never tool output) to Ollama, and rewrites
 Config: ~/.config/claude-recall/config.json (or $CLAUDE_RECALL_CONFIG). Keys:
   ollama_url, model, num_ctx (omit for a tag that sets its own; sending a
   different one makes Ollama reload a shared model), idle_minutes,
-  lookback_days, max_chunk_chars, max_sessions_per_run, min_new_chars, out_dir.
+  lookback_days, max_chunk_chars, max_sessions_per_run, min_new_chars, timeout_seconds, out_dir.
 
 Usage:
   session_index.py [--dry-run] [--session ID] [--backfill] [--ignore-idle] [--limit N] [--log FILE]
@@ -26,6 +26,7 @@ DEFAULTS = {
     "max_chunk_chars": 60000,
     "max_sessions_per_run": 5,
     "min_new_chars": 300,
+    "timeout_seconds": 300,
     "out_dir": "~/notes/claude-sessions",
 }
 MSG_CAP = 2000  # per user message; one long paste should not crowd out the rest
@@ -146,7 +147,7 @@ def summarize(cfg, current, excerpt, words=250):
         body["options"]["num_ctx"] = cfg["num_ctx"]
     req = urllib.request.Request(cfg["ollama_url"].rstrip("/") + "/api/chat",
                                  data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=900) as r:
+    with urllib.request.urlopen(req, timeout=cfg["timeout_seconds"]) as r:
         resp = json.load(r)
     # Ollama truncates silently when input exceeds num_ctx; a far-too-low count means it did.
     est = (len(SYSTEM) + len(excerpt) + len(current or "")) / 4

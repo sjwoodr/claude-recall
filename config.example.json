@@ -7,5 +7,6 @@
   "max_chunk_chars": 60000,
   "max_sessions_per_run": 5,
   "min_new_chars": 300,
+  "timeout_seconds": 300,
   "out_dir": "~/notes/claude-sessions"
 }
