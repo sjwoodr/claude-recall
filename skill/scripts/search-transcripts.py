@@ -13,7 +13,23 @@ Usage:
 """
 import argparse, glob, json, os, re, sys
 
-ROOT = os.path.expanduser("~/.claude/projects")
+def transcript_roots():
+    """~/.claude/projects, then other config dirs' (~/.claude-*/projects, from CLAUDE_CONFIG_DIR)."""
+    roots = [os.path.expanduser("~/.claude/projects")]
+    roots += sorted(glob.glob(os.path.expanduser("~/.claude-*/projects")))
+    return [r for r in roots if os.path.isdir(r)]
+
+
+def transcripts():
+    """Every transcript once: a copy of the same slug/file in a later root is skipped."""
+    seen, out = set(), []
+    for root in transcript_roots():
+        for p in glob.glob(os.path.join(root, "*", "*.jsonl")):
+            rel = os.path.relpath(p, root)
+            if rel not in seen:
+                seen.add(rel)
+                out.append(p)
+    return out
 
 
 HOME_SLUG = re.sub(r"[/.]", "-", os.path.expanduser("~"))
@@ -70,7 +86,7 @@ def main():
     a = ap.parse_args()
 
     pat = re.compile(a.pattern, re.I)
-    files = sorted(glob.glob(os.path.join(ROOT, "*", "*.jsonl")),
+    files = sorted(transcripts(),
                    key=lambda p: os.path.getmtime(p), reverse=True)
     if not files:
         print("  no transcripts found"); return
@@ -81,7 +97,7 @@ def main():
     candidates = None
     if shutil.which("rg"):
         try:
-            r = subprocess.run(["rg", "-l", "-i", a.pattern, ROOT, "-g", "*.jsonl"],
+            r = subprocess.run(["rg", "-l", "-i", a.pattern, *transcript_roots(), "-g", "*.jsonl"],
                                capture_output=True, text=True, timeout=120)
             candidates = set(r.stdout.split())
         except Exception:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep a per-session index of Claude Code sessions, summarized by a local Ollama model.
 
-Scans ~/.claude/projects/*/*.jsonl for transcripts that grew since the last run
+Scans ~/.claude/projects/*/*.jsonl (and ~/.claude-*/projects) for transcripts that grew since the last run
 and have been idle for `idle_minutes`, sends only the NEW part (user messages,
 assistant prose, tool descriptions; never tool output) to Ollama, and rewrites
 <out_dir>/<session-id>.md plus <out_dir>/INDEX.md.
@@ -16,7 +16,23 @@ Usage:
 """
 import argparse, datetime, fcntl, glob, json, os, re, shlex, sys, time, urllib.request
 
-ROOT = os.path.expanduser("~/.claude/projects")
+def transcript_roots():
+    """~/.claude/projects, then other config dirs' (~/.claude-*/projects, from CLAUDE_CONFIG_DIR)."""
+    roots = [os.path.expanduser("~/.claude/projects")]
+    roots += sorted(glob.glob(os.path.expanduser("~/.claude-*/projects")))
+    return [r for r in roots if os.path.isdir(r)]
+
+
+def transcripts():
+    """Every transcript once: a copy of the same slug/file in a later root is skipped."""
+    seen, out = set(), []
+    for root in transcript_roots():
+        for p in glob.glob(os.path.join(root, "*", "*.jsonl")):
+            rel = os.path.relpath(p, root)
+            if rel not in seen:
+                seen.add(rel)
+                out.append(p)
+    return out
 DEFAULTS = {
     "ollama_url": "http://localhost:11434",
     "model": "gemma4:e4b-it-q8_0",
@@ -282,7 +298,7 @@ def main():
 
     # One-time repair: older entries resumed from the session's last dir, not its start dir.
     fixed = 0
-    for path in [] if a.dry_run else glob.glob(os.path.join(ROOT, "*", "*.jsonl")):
+    for path in [] if a.dry_run else transcripts():
         sid = os.path.basename(path)[:-6]
         s = state.get(sid) or {}
         m = s.get("meta")
@@ -299,7 +315,7 @@ def main():
 
     cands = []
     waiting = 0  # grew, but used too recently to summarize
-    for path in glob.glob(os.path.join(ROOT, "*", "*.jsonl")):
+    for path in transcripts():
         sid = os.path.basename(path)[:-6]
         if a.session and not sid.startswith(a.session):
             continue

@@ -27,8 +27,8 @@ corpus search below; the `grep -c` in the loop is a pipe filter, not a search,
 where `rg` buys nothing.)
 
 ```bash
-for d in ~/.claude/projects/*/memory/; do
-  s=$(basename "$(dirname "$d")")
+for d in ~/.claude{,-*}/projects/*/memory/; do
+  s=${d#"$HOME"/}; s=${s%/memory/}
   n=$(ls "$d" 2>/dev/null | grep -c '\.md$')
   [ "$n" -gt 0 ] && printf "%-50s %3s files\n" "$s" "$n"
 done
@@ -47,13 +47,13 @@ Each store has a `MEMORY.md` index with one line per memory. Grep those to see
 which stores are relevant at all:
 
 ```bash
-rg -li "<topic>" ~/.claude/projects/*/memory/MEMORY.md
+rg -li "<topic>" ~/.claude{,-*}/projects/*/memory/MEMORY.md
 ```
 
 Then search the memory bodies for actual hits:
 
 ```bash
-rg -li "<topic>" ~/.claude/projects/*/memory/ | rg -v '/MEMORY\.md$'
+rg -li "<topic>" ~/.claude{,-*}/projects/*/memory/ | rg -v '/MEMORY\.md$'
 ```
 
 Read only the files that matched. Do not bulk-read a whole store: a busy
@@ -64,7 +64,7 @@ If the topic is vague, search the `description:` frontmatter lines instead,
 which is what the indexes are for:
 
 ```bash
-rg -N "^description:" ~/.claude/projects/*/memory/*.md
+rg -N "^description:" ~/.claude{,-*}/projects/*/memory/*.md
 ```
 
 ## 2a. Session index — search with memory, before transcripts
@@ -95,6 +95,11 @@ live NEXT TO the memory dirs, not inside them:
 ~/.claude/projects/<slug>/memory/*.md     <- searched by default (above)
 ~/.claude/projects/<slug>/*.jsonl         <- NOT searched by default
 ```
+
+A second Claude Code config dir (`CLAUDE_CONFIG_DIR=~/.claude-<name>`, one per
+account) has its own `projects/`, so every glob here covers `~/.claude{,-*}`.
+A project can then appear in two stores, often as a copy that has since
+diverged: name which config dir a hit came from.
 
 The corpus is large (often hundreds of MB to GBs) and a single JSONL line can
 be megabytes of tool output, so pulling content from it costs real context.
@@ -143,7 +148,7 @@ projects, where you have less surrounding context to catch a stale claim.
 ## 4. Writing into another store
 
 To save a memory into a project other than the current one, write it to that
-project's directory and add its pointer line to that store's `MEMORY.md`:
+project's directory under the config dir that project runs in and add its pointer line to that store's `MEMORY.md`:
 
 ```
 ~/.claude/projects/<target-slug>/memory/<type>_<slug>.md
